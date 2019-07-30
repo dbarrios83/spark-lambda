@@ -11,14 +11,12 @@ import org.apache.spark.sql.functions._
 object BatchJob {
   def main (args: Array[String]): Unit = {
 
-
-
-
     // setup spark context
     val spark = Settings.getSpark
-    import spark.implicits._
     val sc = spark.sparkContext
     val sqlContext = spark.sqlContext
+
+    import spark.implicits._
 
     // initialize input RDD
     val input = sc.textFile(Settings.WebLogGen.filePath)
@@ -55,8 +53,8 @@ object BatchJob {
 
 //    activityByProduct.write.partitionBy("timestamp_hour").mode(SaveMode.Append).parquet("hdfs://lambda-pluralsight:9000/lambda/batch1")
 
-    visitorsByProduct.foreach(println(_))
-    activityByProduct.foreach(println(_))
+    visitorsByProduct.show()
+    activityByProduct.show()
 
   }
 }
