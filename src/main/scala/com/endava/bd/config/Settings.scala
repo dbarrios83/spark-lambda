@@ -1,25 +1,11 @@
 package com.endava.bd.config
 
 import com.typesafe.config.ConfigFactory
-import org.apache.spark.sql.SparkSession
 
-/**
-  * Created by Ahmad Alkilani on 4/30/2016.
-  */
+
 object Settings {
 
-  private val config = ConfigFactory.load()
-
-  lazy val appName: String = config.getString("app.name")
-
-  lazy val getSpark: SparkSession = {
-    SparkSession
-      .builder
-      .appName(appName)
-      .master("local[*]")
-      .config("spark.sql.streaming.checkpointLocation", config.getString("app.checkpoint_path"))
-      .getOrCreate()
-  }
+  val config = ConfigFactory.load()
 
   object WebLogGen {
     private val weblogGen = config.getConfig("clickstream")
@@ -29,6 +15,7 @@ object Settings {
     lazy val pages = weblogGen.getInt("pages")
     lazy val visitors = weblogGen.getInt("visitors")
     lazy val filePath = weblogGen.getString("file_path")
-
+    lazy val destPath = weblogGen.getString("dest_path")
+    lazy val numberOfFiles = weblogGen.getInt("number_of_files")
   }
 }

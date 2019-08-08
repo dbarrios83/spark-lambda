@@ -2,17 +2,16 @@ package com.endava.bd.batch
 
 import com.endava.bd.config.Settings
 import com.endava.bd.domain.Activity
+import com.endava.bd.utils.SparkUtils
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.functions._
 
-/**
-  * Created by Ahmad Alkilani on 5/1/2016.
-  */
+
 object BatchJob {
   def main (args: Array[String]): Unit = {
 
     // setup spark context
-    val spark = Settings.getSpark
+    val spark = SparkUtils.getSparkSession
     val sc = spark.sparkContext
     val sqlContext = spark.sqlContext
 
