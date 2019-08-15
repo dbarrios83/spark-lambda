@@ -2,7 +2,7 @@ package com.endava.bd.batch
 
 import com.endava.bd.config.Settings
 import com.endava.bd.domain.Activity
-import com.endava.bd.utils.SparkUtils
+import com.endava.bd.utils.SparkUtils._
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.functions._
 
@@ -11,7 +11,7 @@ object BatchJob {
   def main (args: Array[String]): Unit = {
 
     // setup spark context
-    val spark = SparkUtils.getSparkSession
+    val spark = getSparkSession
     val sc = spark.sparkContext
     val sqlContext = spark.sqlContext
 
@@ -19,6 +19,8 @@ object BatchJob {
 
     // initialize input RDD
     val input = sc.textFile(Settings.WebLogGen.filePath)
+
+//    input.toDF().show()
 
     val inputDF = input.flatMap { line =>
       val record = line.split("\\t")
