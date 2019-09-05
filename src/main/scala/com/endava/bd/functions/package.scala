@@ -5,6 +5,7 @@ import com.twitter.algebird.{HLL, HyperLogLogMonoid}
 import org.apache.spark.streaming.State
 
 package object functions {
+
   def mapActivityStateFunc = (k: (String, Long), v: Option[ActivityByProduct], state: State[(Long, Long, Long)]) => {
     var (purchase_count, add_to_cart_count, page_view_count) = state.getOption().getOrElse((0L, 0L, 0L))
 

@@ -58,21 +58,8 @@ object StreamingJob extends App {
       activityByProduct
         .map { r => ((r.getString(0), r.getLong(1)),
           ActivityByProduct(r.getString(0), r.getLong(1), r.getLong(2), r.getLong(3), r.getLong(4))
-        )
-        }
+          )}
     }.rdd).mapWithState(activityStateSpec)
-
-    val activityStateSnapshot = statefulActivityByProduct.stateSnapshots()
-    activityStateSnapshot
-      .reduceByKeyAndWindow(
-        (_, b) => b,
-        (x, _) => x,
-        batchDuration * 5,
-        filterFunc = (_) => false
-      )
-      .foreachRDD(rdd => rdd.map { case ((product, timestamp_hour),(purchase_count, add_to_cart_count, page_view_count)) =>
-        ActivityByProduct(product, timestamp_hour, purchase_count, add_to_cart_count, page_view_count)}
-        .toDF().createOrReplaceTempView("ActivityByProduct"))
 
     // unique visitors by product
     val visitorStateSpec =
@@ -81,24 +68,9 @@ object StreamingJob extends App {
         .timeout(Minutes(120))
 
     val hll = new HyperLogLogMonoid(12)
-    val statefulVisitorsByProduct = activityStream.map( a => {
+    activityStream.map( a => {
       ((a.product, a.timestamp_hour), hll(a.visitor.getBytes))
     } ).mapWithState(visitorStateSpec)
-
-    val visitorStateSnapshot = statefulVisitorsByProduct.stateSnapshots()
-    visitorStateSnapshot
-      .reduceByKeyAndWindow(
-        (_, b) => b,
-        (x, _) => x,
-        batchDuration * 5,
-        filterFunc = (_) => false
-      ) // only save or expose the snapshot every x seconds
-      .foreachRDD(rdd => rdd.map { case ((product, timestamp_hour), unique_visitors_hll) =>
-      VisitorsByProduct(product, timestamp_hour, unique_visitors_hll.approximateSize.estimate)}
-      .toDF().createOrReplaceTempView("VisitorsByProduct"))
-
-    activityStateSnapshot.print()
-    visitorStateSnapshot.print()
 
     ssc
   }
