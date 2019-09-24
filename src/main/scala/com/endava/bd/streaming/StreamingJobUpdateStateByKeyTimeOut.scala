@@ -2,14 +2,14 @@ package com.endava.bd.streaming
 
 import com.endava.bd.config.Settings
 import com.endava.bd.domain.{Activity, ActivityByProduct, VisitorsByProduct}
+import com.endava.bd.functions._
+import com.endava.bd.utils.SparkUtils._
+import com.twitter.algebird.HyperLogLogMonoid
 import org.apache.spark.SparkContext
 import org.apache.spark.streaming._
-import com.endava.bd.utils.SparkUtils._
-import com.endava.bd.functions._
-import com.twitter.algebird.HyperLogLogMonoid
 
 
-object StreamingJob extends App {
+object StreamingJobUpdateState extends App {
 
   // setup spark context
   val sparkSession = getSparkSession
@@ -37,11 +37,6 @@ object StreamingJob extends App {
       }
     }).cache()
 
-    // activity by product
-    val activityStateSpec =
-      StateSpec
-        .function(mapActivityStateFunc)
-        .timeout(Minutes(120))
 
     val statefulActivityByProduct = activityStream.transform(rdd => {
       val df = rdd.toDF()
@@ -58,47 +53,35 @@ object StreamingJob extends App {
       activityByProduct
         .map { r => ((r.getString(0), r.getLong(1)),
           ActivityByProduct(r.getString(0), r.getLong(1), r.getLong(2), r.getLong(3), r.getLong(4))
-        )
-        }
-      }.rdd).mapWithState(activityStateSpec)
+        )}
+    }.rdd).updateStateByKey((newItemsPerKey: Seq[ActivityByProduct], currentState: Option[(Long, Long, Long, Long)]) => {
 
-    val activityStateSnapshot = statefulActivityByProduct.stateSnapshots()
-    activityStateSnapshot
-      .reduceByKeyAndWindow(
-        (_, b) => b,
-        (x, _) => x,
-        batchDuration * 5,
-        filterFunc = (_) => false
-      )
-      .foreachRDD(_.map { case ((product, timestamp_hour),(purchase_count, add_to_cart_count, page_view_count)) =>
-      ActivityByProduct(product, timestamp_hour, purchase_count, add_to_cart_count, page_view_count)}
-        .toDF().createOrReplaceTempView("ActivityByProduct"))
+      var (prevTimestamp, purchase_count, add_to_cart_count, page_view_count) = currentState.getOrElse(System.currentTimeMillis(), 0L, 0L, 0L)
+      var result: Option[(Long, Long, Long, Long)] = null
 
-    // unique visitors by product
-    val visitorStateSpec =
-      StateSpec
-        .function(mapVisitorsStateFunc)
-        .timeout(Minutes(120))
+      if (newItemsPerKey.isEmpty) {
+        if (System.currentTimeMillis() - prevTimestamp > 30000 + 4000)
+          result = None
+        else
+          result = Some(prevTimestamp, purchase_count, add_to_cart_count, page_view_count)
+      } else {
 
-    val hll = new HyperLogLogMonoid(12)
-    val statefulVisitorsByProduct = activityStream.map( a => {
-      ((a.product, a.timestamp_hour), hll(a.visitor.getBytes))
-    } ).mapWithState(visitorStateSpec)
+        newItemsPerKey.foreach( a => {
+          purchase_count += a.purchase_count
+          add_to_cart_count += a.add_to_cart_count
+          page_view_count += a.page_view_count
+        })
 
-    val visitorStateSnapshot = statefulVisitorsByProduct.stateSnapshots()
-    visitorStateSnapshot
-      .reduceByKeyAndWindow(
-        (_, b) => b,
-        (x, _) => x,
-        batchDuration * 5,
-        filterFunc = (_) => false
-      ) // only save or expose the snapshot every x seconds
-      .foreachRDD(rdd => rdd.map { case ((product, timestamp_hour), unique_visitors_hll) =>
-        VisitorsByProduct(product, timestamp_hour, unique_visitors_hll.approximateSize.estimate)}
-        .toDF().createOrReplaceTempView("VisitorsByProduct"))
+        result = Some(System.currentTimeMillis(), purchase_count, add_to_cart_count, page_view_count)
+      }
+      result
+    })
 
-    activityStateSnapshot.print()
-    visitorStateSnapshot.print()
+    statefulActivityByProduct.foreachRDD(rdd => { rdd.map {
+      case ((product, timestamp_hour),(_, purchase_count, add_to_cart_count, page_view_count)) =>
+        ActivityByProduct(product, timestamp_hour, purchase_count, add_to_cart_count, page_view_count)}
+      .toDF().registerTempTable("statefulActivityByProduct")})
+
 
     ssc
   }
